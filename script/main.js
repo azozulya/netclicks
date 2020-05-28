@@ -1,12 +1,25 @@
 
 const IMG_URL = 'https://image.tmdb.org/t/p/w185_and_h278_bestv2';
+const SERVER = 'https://api.themoviedb.org/3';
 const API_KEY = '6fcb9620a842bea26304d7962404e1fe';
 
 const leftMenu = document.querySelector('.left-menu');
 const hamburger = document.querySelector('.hamburger'),
     tvShowsList = document.querySelector('.tv-shows__list'),
-    modal = document.querySelector('.modal');
+    modal = document.querySelector('.modal'),
+    tvShows = document.querySelector('.tv-shows'),
+    tvCardImg = document.querySelector('.tv-card__img'),
+    modalTitle = document.querySelector('.modal__title'),
+    genresList = document.querySelector('.genres-list'),
+    modalLink = document.querySelector('.modal__link'),
+    rating = document.querySelector('.rating'),
+    description = document.querySelector('.description'),
+    searchForm = document.querySelector('.search__form'),
+    searchFormInput = document.querySelector('.search__form-input'),
+    preloader = document.querySelector('.preloader');
 
+const loading = document.createElement('div');
+loading.className = 'loading';
 
 const DBService = class {
     getData =  async (url) => {
@@ -21,40 +34,73 @@ const DBService = class {
     getTestData = async () => {
         return this.getData('test.json');
     }
+
+    getTestCard = async () => {
+        return this.getData('card.json');
+    }
+
+    getSearchResults = query => {
+        return this.getData(SERVER + '/search/tv?api_key=' + API_KEY + 
+            '&query=' + query + '&language=ru-RU&page=1&include_adult=true');
+    }
+
+    getTvShow = id => {
+        return this.getData(SERVER + '/tv/' + id + 
+            '?api_key=' + API_KEY + '&language=ru-RU');
+    }
 };
+
+//console.log(new DBService().getSearchResults('Mother'));
 
 const renderCard = response => {
     tvShowsList.textContent = '';
 
-    response.results.forEach(item => {
-        const { 
-            name: title, 
-            vote_average: vote, 
-            backdrop_path: backdrop, 
-            poster_path: poster 
-            } = item;
+    if (response.total_results) {
+        response.results.forEach(item => {
+            const { 
+                name: title, 
+                vote_average: vote, 
+                backdrop_path: backdrop, 
+                poster_path: poster,
+                id
+                } = item;
 
-        const posterIMG = poster ? IMG_URL + poster : 'img/no-poster.jpg';
-        const backdropIMG = backdrop ? ` data-backdrop="${IMG_URL + backdrop}" ` : '';
-        const voteElem = vote > 0 ? `<span class="tv-card__vote">${vote}</span>` : '';
+            const posterIMG = poster ? IMG_URL + poster : 'img/no-poster.jpg';
+            const backdropIMG = backdrop ? ` data-backdrop="${IMG_URL + backdrop}" ` : '';
+            const voteElem = vote ? `<span class="tv-card__vote">${vote}</span>` : '';
 
-        const card = document.createElement('li');
-        card.className = 'tv-shows__item';
-        card.innerHTML = `
-            <a href="#" class="tv-card">                
-                ${voteElem}
-                <img class="tv-card__img"
-                    src="${posterIMG}"
-                    ${backdropIMG}
-                    alt="${title}">
-                <h4 class="tv-card__head">${title}</h4>
-            </a>
-        `;
-        tvShowsList.append(card);
-    });
+            const card = document.createElement('li');
+            card.className = 'tv-shows__item';
+            card.innerHTML = `
+                <a id="${id}" href="#" class="tv-card">                
+                    ${voteElem}
+                    <img class="tv-card__img"
+                        src="${posterIMG}"
+                        ${backdropIMG}
+                        alt="${title}">
+                    <h4 class="tv-card__head">${title}</h4>
+                </a>
+            `;
+            loading.remove();
+            tvShowsList.append(card);
+        });
+    } else {
+        loading.remove();
+        tvShows.insertAdjacentHTML('beforeend', 'По вашему запросу сериалов не найдено');
+    }
 };
 
-new DBService().getTestData().then(renderCard);
+searchForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const val = searchFormInput.value.trim();
+    if (val) {
+        tvShows.append(loading);    
+        new DBService().getSearchResults(val).then(renderCard);  
+        console.log(new DBService().getSearchResults(val));  
+    }
+    searchFormInput.value = '';
+});
+
 
 // open/shut menu
 
@@ -84,18 +130,72 @@ leftMenu.addEventListener('click', event => {
 });
 
 // open modal window
+
 tvShowsList.addEventListener('click', event => {
     event.preventDefault();
+    preloader.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
     const target = event.target;
     const card = target.closest('.tv-card');
 
     if (card) {
-        document.body.style.overflow = 'hidden';
-        modal.classList.remove('hide');
+
+        new DBService().getTvShow(card.id)
+            .then(({ 
+                poster_path: img,
+                name: title,
+                genres,
+                homepage: link,
+                vote_average: vote,
+                overview
+            }) => {
+                
+                if (img) {
+                    tvCardImg.src = IMG_URL + img;
+                    tvCardImg.parentNode.style.display = '';
+                } else {
+                    tvCardImg.parentNode.style.display = 'none';
+                }
+                modalTitle.textContent = title;
+
+                if (genres.length > 0) {
+                    genresList.innerHTML = genres.reduce((acc, item) => `${acc}<li>${item.name[0].toUpperCase() + item.name.substring(1)}</li>`, '');               
+                    genresList.parentNode.style.display = '';
+                } else {
+                    genresList.parentNode.style.display = 'none';
+                }
+
+                if (link) {
+                    modalLink.href = link;
+                    modalLink.style.display = '';
+                } else {
+                    modalLink.style.display = 'none';
+                }
+                
+                if (vote) {
+                    rating.textContent = vote;
+                    rating.parentNode.style.display = '';
+                } else {
+                    rating.parentNode.style.display = 'none';
+                }
+                
+                if (overview.length > 0) {
+                    description.textContent = overview;
+                    description.closest('.header__info').style.display = '';
+                } else {
+                    description.closest('.header__info').style.display = 'none';
+                }                
+            })
+            .then(() => {
+                preloader.style.display = 'none';                
+                modal.classList.remove('hide');      
+            });
     }
 });
 
 // shut modal window
+
 modal.addEventListener('click', event => {
 
     if (event.target.closest('.cross') ||   
